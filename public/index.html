@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BillBuddy — AI Bill-Pay Agent for Small Shops</title>
+<style>
+  :root {
+    --ink: #14213d; --accent: #0070ba; --accent-dark: #003087;
+    --ok: #137333; --warn: #b06000; --err: #b3261e;
+    --bg: #f4f6fb; --card: #ffffff; --line: #d9dee9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header { background: linear-gradient(120deg, var(--accent-dark), var(--accent)); color: #fff; padding: 28px 20px; }
+  header h1 { margin: 0 0 6px; font-size: 28px; }
+  header p { margin: 0; opacity: .92; max-width: 760px; }
+  .badges { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge { background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.4); padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+  main { max-width: 920px; margin: 0 auto; padding: 20px 16px 48px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(20,33,61,.06); }
+  .card h2 { margin: 0 0 12px; font-size: 18px; }
+  textarea { width: 100%; min-height: 150px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button { border: 0; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: wait; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-dark); }
+  .btn-ghost { background: #eef2f9; color: var(--ink); border: 1px solid var(--line); }
+  .btn-pay { background: #ffc439; color: #111; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: #48506a; margin-bottom: 4px; }
+  input { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+  .msg { padding: 12px 14px; border-radius: 8px; font-size: 14px; display: none; margin-bottom: 14px; }
+  .msg.show { display: block; }
+  .msg.ok { background: #e6f4ea; color: var(--ok); border: 1px solid #a3d9b1; }
+  .msg.warn { background: #fef7e0; color: var(--warn); border: 1px solid #f2cf7e; }
+  .msg.err { background: #fce8e6; color: var(--err); border: 1px solid #f2b8b5; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: #48506a; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .pill.PAID { background: #e6f4ea; color: var(--ok); }
+  .pill.SIMULATED { background: #fef7e0; color: var(--warn); }
+  .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; }
+  a.approve { display: inline-block; background: var(--accent); color: #fff; padding: 10px 16px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 10px; }
+  .hidden { display: none; }
+  footer { text-align: center; color: #778; font-size: 12px; padding: 0 16px 28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧾 BillBuddy</h1>
+  <p>AI Bill-Pay Agent for Small Shops — paste a supplier bill, let AI draft the payment,
+     approve it, and pay through <strong>PayPal Sandbox</strong>. No more manual bill typing.</p>
+  <div class="badges" id="configBadges"></div>
+</header>
+
+<main>
+  <div id="banner" class="msg"></div>
+
+  <!-- Step 1: bill input -->
+  <section class="card">
+    <h2>1 · Paste a supplier bill</h2>
+    <div class="row" style="margin-bottom:10px;">
+      <button class="btn-ghost" id="sample1" type="button">Sample: Kirana wholesale invoice</button>
+      <button class="btn-ghost" id="sample2" type="button">Sample: Electricity bill</button>
+    </div>
+    <textarea id="billText" placeholder="Paste the bill text here — an invoice, a utility bill, a supplier's WhatsApp message…"></textarea>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn-primary" id="extractBtn" type="button">✨ Extract with AI</button>
+      <span id="extractNote" style="font-size:13px;color:#667;"></span>
+    </div>
+  </section>
+
+  <!-- Step 2: editable draft -->
+  <section class="card hidden" id="draftCard">
+    <h2>2 · Review the payment draft</h2>
+    <div class="grid">
+      <div><label>Payee name</label><input id="f_payee_name" /></div>
+      <div><label>Payee email (optional)</label><input id="f_payee_email" type="email" /></div>
+      <div><label>Amount</label><input id="f_amount" type="number" min="0" step="0.01" /></div>
+      <div><label>Currency</label><input id="f_currency" maxlength="3" /></div>
+      <div><label>Due date</label><input id="f_due_date" /></div>
+      <div><label>Invoice #</label><input id="f_invoice_no" /></div>
+      <div style="grid-column: 1 / -1;"><label>Description</label><input id="f_description" /></div>
+    </div>
+    <div class="row" style="margin-top:16px;">
+      <button class="btn-pay" id="payBtn" type="button">Approve &amp; Pay with PayPal (Sandbox)</button>
+    </div>
+    <p style="font-size:12px;color:#667;margin:8px 0 0;">PayPal sandbox settles in USD — INR bills are converted at a demo rate (₹83 = $1).</p>
+    <div id="payResult" style="margin-top:14px;"></div>
+  </section>
+
+  <!-- Step 3: ledger -->
+  <section class="card">
+    <h2>3 · Payment ledger</h2>
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Payee</th><th>Amount</th><th>Settled</th><th>Status</th><th>PayPal order / txn</th></tr>
+      </thead>
+      <tbody id="ledgerBody"><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn-ghost" id="refreshLedger" type="button">↻ Refresh ledger</button>
+    </div>
+  </section>
+</main>
+
+<footer>BillBuddy · PayPal AI Hackathon · All payments run on the PayPal <strong>Sandbox</strong> — no real money moves.</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+const SAMPLES = {
+  sample1: [
+    'Sri Lakshmi Wholesale Traders',
+    '14, Bazaar Street, Madurai, Tamil Nadu',
+    'Email: srilakshmi.wholesale@example.com',
+    '',
+    'TAX INVOICE',
+    'Invoice No: SLWT/2026/1847',
+    'Date: 05 Nov 2026',
+    '',
+    'Billed to: Guna Stores, Chennai',
+    '',
+    'Items: Rice 25kg x 10, Toor Dal 10kg x 5, Sunflower Oil 15L x 4, Sugar 50kg x 2',
+    'Subtotal: Rs. 18,240.00',
+    'GST (5%): Rs. 912.00',
+    'Grand Total: Rs. 19,152.00',
+    '',
+    'Payment due date: 15 Nov 2026. Please pay before the due date to avoid late charges.'
+  ].join('\n'),
+  sample2: [
+    'Tamil Nadu Electricity Board (TNEB)',
+    'Consumer Services — Electricity Bill',
+    '',
+    'Consumer No: 092145678301',
+    'Bill No: EB/CHN/2026/90231',
+    'Billing period: Oct 2026',
+    '',
+    'Units consumed: 486 kWh',
+    'Energy charges: Rs. 3,402.00',
+    'Fixed charges: Rs. 120.00',
+    'Total Amount Due: Rs. 3,522.00',
+    '',
+    'Due Date: 20 Nov 2026. Pay online or at any EB office.'
+  ].join('\n')
+};
+
+$('sample1').addEventListener('click', () => { $('billText').value = SAMPLES.sample1; });
+$('sample2').addEventListener('click', () => { $('billText').value = SAMPLES.sample2; });
+
+function showBanner(kind, text) {
+  const b = $('banner');
+  b.className = 'msg show ' + kind;
+  b.textContent = text;
+}
+
+// Returned from PayPal approval redirect?
+(function () {
+  const q = new URLSearchParams(location.search);
+  const status = q.get('status');
+  if (status === 'paid') showBanner('ok', '✅ Payment captured successfully on PayPal Sandbox. Order: ' + (q.get('order') || '') + ' — see the ledger below.');
+  else if (status === 'cancelled') showBanner('warn', 'Payment was cancelled at PayPal. Nothing was charged; the draft is still yours to retry.');
+  else if (status === 'error') showBanner('err', 'Something went wrong while capturing the payment. Order: ' + (q.get('order') || 'n/a'));
+})();
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    const c = await r.json();
+    $('configBadges').innerHTML =
+      '<span class="badge">Gemini AI: ' + (c.gemini_configured ? 'connected' : 'demo parser mode') + '</span>' +
+      '<span class="badge">PayPal: ' + (c.paypal_configured ? c.paypal_env : 'simulated mode') + '</span>';
+  } catch { /* non-fatal */ }
+}
+
+let currentDraft = null;
+
+$('extractBtn').addEventListener('click', async () => {
+  const bill_text = $('billText').value.trim();
+  if (!bill_text) { showBanner('err', 'Please paste a bill first (or try a sample).'); return; }
+  const btn = $('extractBtn');
+  btn.disabled = true; btn.textContent = 'Extracting…';
+  try {
+    const r = await fetch('/api/extract', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bill_text })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Extraction failed');
+    currentDraft = data.draft;
+    for (const k of ['payee_name','payee_email','amount','currency','due_date','invoice_no','description']) {
+      $('f_' + k).value = data.draft[k] ?? '';
+    }
+    $('draftCard').classList.remove('hidden');
+    $('extractNote').textContent = data.demo_mode
+      ? '⚠️ Demo parser used (no Gemini key configured) — please double-check every field.'
+      : 'Extracted by Google Gemini. Edit anything before paying.';
+    showBanner('ok', 'Draft ready — review it below, then approve & pay.');
+  } catch (e) {
+    showBanner('err', 'Extraction failed: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '✨ Extract with AI';
+  }
+});
+
+function readDraftFromForm() {
+  return {
+    payee_name: $('f_payee_name').value.trim(),
+    payee_email: $('f_payee_email').value.trim(),
+    amount: Number($('f_amount').value),
+    currency: $('f_currency').value.trim().toUpperCase() || 'INR',
+    due_date: $('f_due_date').value.trim(),
+    invoice_no: $('f_invoice_no').value.trim(),
+    description: $('f_description').value.trim()
+  };
+}
+
+// Settlement line from the /api/pay response, e.g.
+// "Charged $230.75 USD (= ₹19,152 at ₹83/$)" for a converted INR bill.
+function settlementHtml(data, draft) {
+  const s = data.settlement;
+  if (!s) return '';
+  if (s.converted) {
+    return '<br/>💱 Charged $' + Number(s.amount).toFixed(2) + ' USD (= ₹' +
+      Number(draft.amount).toLocaleString('en-IN') + ' at ₹' + s.fx_rate + '/$)';
+  }
+  return '<br/>💱 Settled as ' + escapeHtml(s.currency) + ' ' + Number(s.amount).toFixed(2) + ' (no conversion needed)';
+}
+
+// Ledger "Settled" cell: settlement amount+currency when it differs from the
+// bill amount, else an em dash.
+function settledCell(e) {
+  if (e.settlement_amount == null || !e.settlement_currency) return '—';
+  const same = e.settlement_currency === (e.currency || '') &&
+    Number(e.settlement_amount) === Number(e.amount || 0);
+  if (same) return '—';
+  return escapeHtml(e.settlement_currency) + ' ' +
+    Number(e.settlement_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+$('payBtn').addEventListener('click', async () => {
+  const draft = readDraftFromForm();
+  if (!draft.payee_name || !(draft.amount > 0)) {
+    showBanner('err', 'Payee name and an amount greater than 0 are required.');
+    return;
+  }
+  const btn = $('payBtn');
+  btn.disabled = true; btn.textContent = 'Processing…';
+  $('payResult').innerHTML = '';
+  try {
+    const r = await fetch('/api/pay', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ draft })
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Payment failed');
+
+    if (data.simulated) {
+      $('payResult').innerHTML =
+        '<div class="msg show warn">🧪 <strong>SIMULATED payment</strong> — ' + data.message +
+        '<br/>Order ID: <span class="mono">' + data.paypal_order_id + '</span>' + settlementHtml(data, draft) + '</div>';
+    } else {
+      let html = '<div class="msg show ok">Sandbox order created: <span class="mono">' + data.paypal_order_id + '</span><br/>' + data.message + settlementHtml(data, draft) + '</div>';
+      if (data.approve_url) {
+        html += '<a class="approve" href="' + data.approve_url + '" target="_blank" rel="noopener">👉 Complete approval on PayPal Sandbox</a>' +
+          '<p style="font-size:13px;color:#667;">After approving, PayPal redirects back here and the payment is captured automatically. ' +
+          'If the redirect does not happen, use this button instead:</p>' +
+          '<button class="btn-ghost" id="captureBtn" type="button">I approved — capture payment</button>';
+      }
+      $('payResult').innerHTML = html;
+      const capBtn = $('captureBtn');
+      if (capBtn) {
+        capBtn.addEventListener('click', async () => {
+          capBtn.disabled = true; capBtn.textContent = 'Capturing…';
+          try {
+            const cr = await fetch('/api/pay/capture/' + encodeURIComponent(data.paypal_order_id), {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ draft })
+            });
+            const cd = await cr.json();
+            if (!cr.ok) throw new Error(cd.error || 'Capture failed');
+            showBanner('ok', '✅ Payment PAID on PayPal Sandbox. Transaction: ' + cd.transaction_id);
+            loadLedger();
+          } catch (e) {
+            showBanner('err', 'Capture failed: ' + e.message + ' (approve on PayPal first, then retry.)');
+          } finally {
+            capBtn.disabled = false; capBtn.textContent = 'I approved — capture payment';
+          }
+        });
+      }
+    }
+    loadLedger();
+  } catch (e) {
+    showBanner('err', 'Payment failed: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Approve & Pay with PayPal (Sandbox)';
+  }
+});
+
+async function loadLedger() {
+  try {
+    const r = await fetch('/api/ledger');
+    const { entries } = await r.json();
+    const body = $('ledgerBody');
+    if (!entries.length) {
+      body.innerHTML = '<tr><td colspan="6">No payments yet — extract a bill and approve a payment.</td></tr>';
+      return;
+    }
+    body.innerHTML = entries.map((e) =>
+      '<tr><td>' + new Date(e.time).toLocaleString() + '</td>' +
+      '<td>' + escapeHtml(e.payee_name) + (e.invoice_no ? '<br/><span class="mono">Inv: ' + escapeHtml(e.invoice_no) + '</span>' : '') + '</td>' +
+      '<td>' + (e.amount ? escapeHtml(e.currency || '') + ' ' + Number(e.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—') + '</td>' +
+      '<td>' + settledCell(e) + '</td>' +
+      '<td><span class="pill ' + e.status + '">' + e.status + '</span></td>' +
+      '<td class="mono">' + escapeHtml(e.paypal_order_id || '') + (e.transaction_id ? '<br/>txn: ' + escapeHtml(e.transaction_id) : '') + '</td></tr>'
+    ).join('');
+  } catch {
+    $('ledgerBody').innerHTML = '<tr><td colspan="6">Could not load the ledger.</td></tr>';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+$('refreshLedger').addEventListener('click', loadLedger);
+loadConfig();
+loadLedger();
+</script>
+</body>
+</html>

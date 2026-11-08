@@ -1,0 +1,1 @@
+{"dependencies":{"dotenv":"^16.4.5","express":"^4.19.2"},"description":"BillBuddy — AI Bill-Pay Agent for Small Shops. Paste a supplier bill, AI extracts a payment draft, approve it, and pay via PayPal Sandbox.","engines":{"node":">=18"},"license":"MIT","main":"server.js","name":"billbuddy","scripts":{"start":"node server.js"},"type":"commonjs","version":"1.0.0"}
