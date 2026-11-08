@@ -186,7 +186,9 @@ function demoParse(billText) {
   // Prefer an explicit total line; otherwise take the largest money figure.
   let amount = 0;
   const moneyRe = /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/gi;
-  const totalLine = lines.find((l) => /total|amount due|grand total|balance due/i.test(l));
+  const totalLine =
+    lines.find((l) => !/subtotal/i.test(l) && /grand total|total amount due|amount due|balance due|total due/i.test(l)) ||
+    lines.find((l) => !/subtotal/i.test(l) && /total/i.test(l));
   const scan = (text) => {
     let m;
     let best = 0;
@@ -200,8 +202,17 @@ function demoParse(billText) {
   amount = totalLine ? scan(totalLine) : 0;
   if (!amount) amount = scan(billText);
 
-  const invoiceMatch = billText.match(/(?:invoice|inv|bill)\s*(?:no\.?|#|number)?\s*[:\-]?\s*([A-Za-z0-9\-\/]+)/i);
+  const invoiceMatch =
+    billText.match(/(?:invoice|bill)\s*(?:no\.?|#|number)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\-\/]*)/i) ||
+    billText.match(/(?:invoice|inv|bill)\s*(?:no\.?|#|number)?\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\-\/]+)/i);
   const dueMatch = billText.match(/(?:due\s*date|pay\s*by|due)\s*[:\-]?\s*(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}|\d{4}-\d{2}-\d{2})/i);
+  const dueTextMatch = billText.match(/(?:due\s*date|pay\s*by|due)[:\-\s]*(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i);
+  const MONTHS = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+  const due_date = dueMatch
+    ? dueMatch[1]
+    : dueTextMatch
+      ? `${dueTextMatch[3]}-${MONTHS[dueTextMatch[2]]}-${dueTextMatch[1].padStart(2, '0')}`
+      : '';
   const emailMatch = billText.match(/[^\s@]+@[^\s@]+\.[^\s@]+/);
 
   return {
@@ -209,7 +220,7 @@ function demoParse(billText) {
     payee_email: emailMatch ? emailMatch[0] : '',
     amount,
     currency: 'INR',
-    due_date: dueMatch ? dueMatch[1] : '',
+    due_date,
     invoice_no: invoiceMatch ? invoiceMatch[1] : '',
     description: lines.slice(0, 3).join(' — ').slice(0, 120),
   };
