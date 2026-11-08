@@ -185,7 +185,7 @@ function demoParse(billText) {
 
   // Prefer an explicit total line; otherwise take the largest money figure.
   let amount = 0;
-  const moneyRe = /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)/gi;
+  const moneyRe = /(?:₹|Rs\.?|INR)\s*([\d,]+(?:\.\d{1,2})?)|([\d,]+(?:\.\d{1,2})?)\s*(?:INR|Rs\.?)/gi;
   const totalLine =
     lines.find((l) => !/subtotal/i.test(l) && /grand total|total amount due|amount due|balance due|total due/i.test(l)) ||
     lines.find((l) => !/subtotal/i.test(l) && /total/i.test(l));
@@ -194,12 +194,17 @@ function demoParse(billText) {
     let best = 0;
     moneyRe.lastIndex = 0;
     while ((m = moneyRe.exec(text)) !== null) {
-      const v = parseFloat(m[1].replace(/,/g, ''));
+      const v = parseFloat((m[1] || m[2]).replace(/,/g, ''));
       if (Number.isFinite(v) && v > best) best = v;
     }
     return best;
   };
   amount = totalLine ? scan(totalLine) : 0;
+  if (!amount && totalLine) {
+    // Fallback: a bare number on the total line (no currency marker).
+    const bare = totalLine.match(/[\d,]+(?:\.\d{1,2})?/g);
+    if (bare) amount = Math.max(...bare.map((s) => parseFloat(s.replace(/,/g, '')) || 0));
+  }
   if (!amount) amount = scan(billText);
 
   const invoiceMatch =
