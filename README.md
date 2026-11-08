@@ -32,7 +32,7 @@ Ledger (JSON) ◄── capture ◄── PayPal redirect /pay/return ◄── 
 ```
 
 1. **Extract** — `POST /api/extract` sends the bill text to Google Gemini
-   (`gemini-2.5-flash`) with a strict JSON-extraction prompt and returns a validated
+   (`gemini-3.8-flash`) with a strict JSON-extraction prompt and returns a validated
    draft: `payee_name, payee_email, amount, currency, due_date, invoice_no, description`.
 2. **Review** — the draft is shown as a fully editable card. The human is always in
    the loop: no payment is created until the owner clicks approve.
@@ -118,7 +118,7 @@ Open **http://localhost:3000**.
 
 ## AI tools used
 
-- **Google Gemini** (`gemini-2.5-flash`) — bill understanding and structured extraction.
+- **Google Gemini** (`gemini-3.8-flash`) — bill understanding and structured extraction.
 - Development assistance from an AI coding assistant for scaffolding and review.
 
 ## Project structure
